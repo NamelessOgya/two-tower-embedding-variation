@@ -1,0 +1,42 @@
+# ==============================================================
+# tt-embedding-variation / plan_001
+# Python 3.11, CUDA 12.4 (PyTorch 2.4 wheels)
+# ==============================================================
+
+# --- Core ML ---
+torch==2.4.1
+torchvision==0.19.1
+
+# --- Transformers / Embeddings ---
+transformers==4.44.2
+sentence-transformers==3.1.1
+tokenizers==0.19.1
+huggingface-hub==0.24.7
+safetensors==0.4.5
+accelerate==0.34.2
+
+# --- ANN / FAISS (GPU) ---
+faiss-gpu-cu12==1.7.3
+
+# --- Data ---
+pandas==2.2.2
+numpy==1.26.4
+pyarrow==17.0.0
+datasets==2.21.0
+
+# --- ML Utilities ---
+scikit-learn==1.5.2
+scipy==1.14.1
+
+# --- Experiment Management ---
+tqdm==4.66.5
+rich==13.8.1
+pydantic==2.9.2
+
+# --- Visualization ---
+matplotlib==3.9.2
+seaborn==0.13.2
+
+# --- Dev / Notebook ---
+ipykernel==6.29.5
+jupyter==1.1.1

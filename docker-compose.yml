@@ -1,0 +1,60 @@
+services:
+  experiment:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tt-embedding-variation:latest
+    container_name: tt-exp
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - PYTHONPATH=/workspace
+      # HuggingFace token (set in .env file, not committed)
+      - HF_TOKEN=${HF_TOKEN:-}
+      # Suppress tokenizer parallelism warning
+      - TOKENIZERS_PARALLELISM=false
+    volumes:
+      # Source code (hot-reload without rebuild)
+      - ./src:/workspace/src
+      - ./result:/workspace/result
+      # HuggingFace model cache persisted on host
+      - ${HF_CACHE_DIR:-./docker/hf_cache}:/workspace/.cache/huggingface
+      # Dataset storage (MovieLens / Yelp downloaded here)
+      - ${DATA_DIR:-./data}:/workspace/data
+    shm_size: "4gb"
+    tty: true
+    stdin_open: true
+
+  # Jupyter server for exploratory analysis
+  notebook:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tt-embedding-variation:latest
+    container_name: tt-notebook
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - PYTHONPATH=/workspace
+      - TOKENIZERS_PARALLELISM=false
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      - ./src:/workspace/src
+      - ./result:/workspace/result
+      - ${HF_CACHE_DIR:-./docker/hf_cache}:/workspace/.cache/huggingface
+      - ${DATA_DIR:-./data}:/workspace/data
+      - ./notebooks:/workspace/notebooks
+    ports:
+      - "8888:8888"
+    shm_size: "4gb"
+    command: >
+      jupyter lab
+        --ip=0.0.0.0
+        --port=8888
+        --no-browser
+        --allow-root
+        --NotebookApp.token=''
+        --NotebookApp.password=''
+        --notebook-dir=/workspace

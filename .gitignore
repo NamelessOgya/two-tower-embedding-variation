@@ -1,0 +1,30 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Data (large files, download separately)
+data/
+docker/hf_cache/
+
+# Results (generated)
+result/
+
+# Notebooks checkpoints
+notebooks/.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.idea/
