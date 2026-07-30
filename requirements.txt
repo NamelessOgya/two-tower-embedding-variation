@@ -4,8 +4,8 @@
 # ==============================================================
 
 # --- Core ML ---
-torch==2.4.1
-torchvision==0.19.1
+# torch 2.7.1 is pre-installed in the base image; only torchvision added here
+torchvision==0.22.1
 
 # --- Transformers / Embeddings ---
 transformers==4.44.2
@@ -15,12 +15,14 @@ huggingface-hub==0.24.7
 safetensors==0.4.5
 accelerate==0.34.2
 
-# --- ANN / FAISS (GPU) ---
-faiss-gpu-cu12==1.7.3
+# --- ANN / FAISS ---
+# faiss-gpu-cu12 does not yet support RTX 5090 (sm_120 / Blackwell).
+# CPU FAISS is sufficient for MovieLens (~4k items) and Yelp scales.
+faiss-cpu>=1.9.0
 
 # --- Data ---
 pandas==2.2.2
-numpy==1.26.4
+numpy>=1.26,<3
 pyarrow==17.0.0
 datasets==2.21.0
 

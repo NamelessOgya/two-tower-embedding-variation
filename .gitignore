@@ -16,6 +16,7 @@ docker/hf_cache/
 
 # Results (generated)
 result/
+*.csv
 
 # Notebooks checkpoints
 notebooks/.ipynb_checkpoints/

@@ -2,7 +2,7 @@
 # tt-embedding-variation
 # Base: PyTorch 2.4.1 + CUDA 12.4 (Ubuntu 22.04)
 # ==============================================================
-FROM pytorch/pytorch:2.4.1-cuda12.4-cudnn9-runtime
+FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
 
 LABEL maintainer="tt-embedding-variation"
 LABEL description="Two-Tower Embedding Diversity Experiment Environment"
