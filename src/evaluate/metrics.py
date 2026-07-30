@@ -7,16 +7,38 @@ from itertools import combinations
 import numpy as np
 
 
-def recall_at_k(trial_sets: list[set], ground_truth: set) -> float:
-    """Cumulative recall: union of all trial recommendation sets vs GT."""
+def recall_cum(trial_sets: list[set], ground_truth: set) -> float:
+    """recall_cum: N試行の推薦リストの和集合に対する recall.
+
+    recall_cum = |union(R_1, ..., R_N) ∩ GT| / |GT|
+
+    多様化により何回かの試行のうちどれかで正解を見つけた割合。
+    N試行の結果を蓄積するため、多様性が高いほど上昇する。
+    """
     if not ground_truth:
         return 0.0
     union = set().union(*trial_sets) if trial_sets else set()
     return len(union & ground_truth) / len(ground_truth)
 
+# 後方互換エイリアス
+recall_at_k = recall_cum
+
+
+def recall_avg(trial_sets: list[set], ground_truth: set) -> float:
+    """recall_avg: 1試行あたりの recall の平均.
+
+    recall_avg = mean_t [ |R_t ∩ GT| / |GT| ]
+
+    各試行の精度（推薦精度）を平均したもの。
+    多様性の影響を受けず、1回あたりの推薦の質を表す。
+    """
+    if not ground_truth:
+        return 0.0
+    return float(np.mean([recall_at_k_single(s, ground_truth) for s in trial_sets]))
+
 
 def recall_at_k_single(recommended: set, ground_truth: set) -> float:
-    """Recall for a single trial."""
+    """1試行・1ユーザーの recall (内部ヘルパー)."""
     if not ground_truth:
         return 0.0
     return len(recommended & ground_truth) / len(ground_truth)

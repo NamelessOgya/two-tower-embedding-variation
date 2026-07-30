@@ -18,6 +18,7 @@ services:
       # Source code (hot-reload without rebuild)
       - ./src:/workspace/src
       - ./result:/workspace/result
+      - ./report:/workspace/report
       # HuggingFace model cache persisted on host
       - ${HF_CACHE_DIR:-./docker/hf_cache}:/workspace/.cache/huggingface
       # Dataset storage (MovieLens / Yelp downloaded here)
@@ -43,6 +44,7 @@ services:
     volumes:
       - ./src:/workspace/src
       - ./result:/workspace/result
+      - ./report:/workspace/report
       - ${HF_CACHE_DIR:-./docker/hf_cache}:/workspace/.cache/huggingface
       - ${DATA_DIR:-./data}:/workspace/data
       - ./notebooks:/workspace/notebooks

@@ -150,7 +150,7 @@ def evaluate_one_seed(
             global_recommended.update(recs)
 
         per_user["recall_cum"].append(recall_at_k(trial_sets, gt))
-        per_user["recall_single"].append(
+        per_user["recall_avg"].append(
             float(np.mean([recall_at_k_single(s, gt) for s in trial_sets]))
         )
         per_user["hit"].append(
@@ -224,7 +224,7 @@ def run_experiment(
             log.info(
                 f"  seed={seed}  "
                 f"recall_cum={m['recall_cum']:.4f}  "
-                f"recall_1={m['recall_single']:.4f}  "
+                f"recall_avg={m['recall_avg']:.4f}  "
                 f"hit={m['hit']:.4f}  "
                 f"ndcg={m['ndcg']:.4f}  "
                 f"overlap={m['temporal_overlap']:.4f}  "
@@ -244,6 +244,7 @@ def run_experiment(
         log.info(
             f"  [AVG]  "
             f"recall_cum={avg['recall_cum']:.4f}±{std['recall_cum']:.4f}  "
+            f"recall_avg={avg['recall_avg']:.4f}±{std['recall_avg']:.4f}  "
             f"overlap={avg['temporal_overlap']:.4f}±{std['temporal_overlap']:.4f}  "
             f"ild={avg['ild']:.4f}±{std['ild']:.4f}  "
             f"cov={avg['coverage']:.4f}±{std['coverage']:.4f}"
