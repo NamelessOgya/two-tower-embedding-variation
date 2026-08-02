@@ -28,6 +28,11 @@ from src.model.models_003 import DIV_LOSSES, NEEDS_ITEMS
 log = logging.getLogger(__name__)
 
 
+def format_lambda_str(lam: float) -> str:
+    s = f"{lam:.4f}".rstrip("0").rstrip(".")
+    return s.replace(".", "p")
+
+
 # ── M4 Gaussian Noise on M0_strong ───────────────────────────────────────────
 
 class M4_strong_Gauss(M0_EnhancedBase):
@@ -103,7 +108,8 @@ class M3B_strong_Adapter(M0_EnhancedBase):
         epochs: int = 50,
         batch_size: int = 512,
     ):
-        name = f"3B_strong_{div_loss_name}_l{lambda_div:.1f}".replace(".", "p")
+        lam_str = format_lambda_str(lambda_div)
+        name = f"3B_strong_{div_loss_name}_l{lam_str}"
         super().__init__(
             name=name,
             use_whitening=True,

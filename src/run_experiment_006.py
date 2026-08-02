@@ -45,7 +45,7 @@ log = logging.getLogger(__name__)
 
 SIGMA_SWEEP = [0.001, 0.005, 0.01, 0.02, 0.05, 0.10, 0.20]
 DROPOUT_SWEEP = [0.05, 0.10, 0.20, 0.30, 0.50]
-LAMBDA_SWEEP = [0.0001, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0]  # Micro-lambda sweep
+LAMBDA_SWEEP = [0.0001, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0]
 SWEEP_LOSSES = ["cosine_emb", "l2_emb", "soft_jaccard", "listnet"]
 
 
@@ -192,7 +192,12 @@ def plot_unified_006(results: dict, out_dir: Path):
         if name.startswith("M4_strong_gauss"):
             m = r["mean"]
             div = 1.0 - m["temporal_overlap"]
-            m4_pts.append((div, m["recall_avg"], m["recall_cum"]))
+            sig_str = name.split("_s")[-1].replace("p", ".")
+            try:
+                sig = float(sig_str)
+            except ValueError:
+                sig = 0.0
+            m4_pts.append((div, m["recall_avg"], m["recall_cum"], sig))
     m4_pts.sort(key=lambda x: x[0])
     if m4_pts:
         d = [p[0] for p in m4_pts]
@@ -224,7 +229,12 @@ def plot_unified_006(results: dict, out_dir: Path):
             if name.startswith(prefix):
                 m = r["mean"]
                 div = 1.0 - m["temporal_overlap"]
-                pts.append((div, m["recall_avg"], m["recall_cum"]))
+                lam_str = name[len(prefix):].replace("p", ".")
+                try:
+                    lam = float(lam_str)
+                except ValueError:
+                    lam = 0.0
+                pts.append((div, m["recall_avg"], m["recall_cum"], lam))
         pts.sort(key=lambda x: x[0])
         if pts:
             d = [p[0] for p in pts]
@@ -233,6 +243,9 @@ def plot_unified_006(results: dict, out_dir: Path):
             col = colors.get(loss, "#aaaaaa")
             ax0.plot(d, ra, "D-.", color=col, lw=2, label=f"3B {loss} (λ micro-sweep)")
             ax1.plot(d, rc, "D-.", color=col, lw=2, label=f"3B {loss} (λ micro-sweep)")
+            for div_val, rc_val, lam_val in zip(d, rc, [p[3] for p in pts]):
+                if lam_val in (0.05, 0.1, 1.0):
+                    ax1.annotate(f"λ={lam_val}", (div_val, rc_val), fontsize=7, color=col, xytext=(3, 3), textcoords="offset points")
 
     ax0.set_xlabel("Diversity (1 − temporal_overlap) ↑", color="#e0e0e0", fontsize=10)
     ax0.set_ylabel("recall_avg ↑ (1-trial precision)", color="#e0e0e0", fontsize=10)
@@ -262,11 +275,20 @@ def main(subexp: str, device: str):
     test_gt = get_test_gt(interactions, uid2idx, iid2idx)
 
     all_results = {}
+    res_json = report_dir / "results.json"
+    if res_json.exists():
+        try:
+            with open(res_json) as f:
+                all_results = json.load(f)
+            log.info(f"Loaded {len(all_results)} existing model results from {res_json}")
+        except Exception as e:
+            log.warning(f"Could not load {res_json}: {e}")
 
     # M0_strong baseline reference
-    m0_strong = M0_EnhancedBase(name="M0_strong", use_whitening=True, use_logq=True, logit_scale=14.3, alpha=0.1)
-    res_m0 = run_models_eval([m0_strong], test_gt, train_pos, user_embs, item_embs, device, len(item_embs))
-    all_results.update(res_m0)
+    if "M0_strong" not in all_results:
+        m0_strong = M0_EnhancedBase(name="M0_strong", use_whitening=True, use_logq=True, logit_scale=14.3, alpha=0.1)
+        res_m0 = run_models_eval([m0_strong], test_gt, train_pos, user_embs, item_embs, device, len(item_embs))
+        all_results.update(res_m0)
 
     # ─── 6A: M4 Gaussian Noise ───────────────────────────────────────────────
     if subexp in ("6a", "all"):
