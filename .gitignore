@@ -29,3 +29,6 @@ Thumbs.db
 # Editor
 .vscode/settings.json
 .idea/
+
+# logfiles  
+*.log
