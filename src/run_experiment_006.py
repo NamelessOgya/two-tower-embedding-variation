@@ -1,10 +1,10 @@
 """
-Plan 006 Experiment Runner
---------------------------
+Plan 006 Experiment Runner (with Micro-Lambda Sweep for 3B Adapters)
+---------------------------------------------------------------------
 Evaluates all diversity methods on top of M0_strong (Whitened + CLIP Logit Scaling + Log-Q):
   - 6A: M4_strong Gaussian noise (sigma sweep)
   - 6B: M5_strong MC Dropout (p sweep)
-  - 6C: 3B_strong Diversity Adapter (lambda sweep across 4 losses)
+  - 6C: 3B_strong Diversity Adapter (micro-lambda sweep: 0.0001 to 2.0 across 4 losses)
   - 6D: Unified Pareto Frontier Plots
 
 Usage:
@@ -45,7 +45,7 @@ log = logging.getLogger(__name__)
 
 SIGMA_SWEEP = [0.001, 0.005, 0.01, 0.02, 0.05, 0.10, 0.20]
 DROPOUT_SWEEP = [0.05, 0.10, 0.20, 0.30, 0.50]
-LAMBDA_SWEEP = [0.1, 0.5, 1.0, 2.0]
+LAMBDA_SWEEP = [0.0001, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0]  # Micro-lambda sweep
 SWEEP_LOSSES = ["cosine_emb", "l2_emb", "soft_jaccard", "listnet"]
 
 
@@ -170,7 +170,6 @@ def plot_unified_006(results: dict, out_dir: Path):
 
     ax0, ax1 = axes
 
-    # Method colors
     colors = {
         "M0_strong": "#ffffff",
         "M4_gauss":  "#e74c3c",
@@ -193,12 +192,7 @@ def plot_unified_006(results: dict, out_dir: Path):
         if name.startswith("M4_strong_gauss"):
             m = r["mean"]
             div = 1.0 - m["temporal_overlap"]
-            sig_str = name.split("_s")[-1].replace("p", ".")
-            try:
-                sig = float(sig_str)
-            except ValueError:
-                sig = 0.0
-            m4_pts.append((div, m["recall_avg"], m["recall_cum"], sig))
+            m4_pts.append((div, m["recall_avg"], m["recall_cum"]))
     m4_pts.sort(key=lambda x: x[0])
     if m4_pts:
         d = [p[0] for p in m4_pts]
@@ -237,8 +231,8 @@ def plot_unified_006(results: dict, out_dir: Path):
             ra = [p[1] for p in pts]
             rc = [p[2] for p in pts]
             col = colors.get(loss, "#aaaaaa")
-            ax0.plot(d, ra, "D-.", color=col, lw=2, label=f"3B {loss} (λ sweep)")
-            ax1.plot(d, rc, "D-.", color=col, lw=2, label=f"3B {loss} (λ sweep)")
+            ax0.plot(d, ra, "D-.", color=col, lw=2, label=f"3B {loss} (λ micro-sweep)")
+            ax1.plot(d, rc, "D-.", color=col, lw=2, label=f"3B {loss} (λ micro-sweep)")
 
     ax0.set_xlabel("Diversity (1 − temporal_overlap) ↑", color="#e0e0e0", fontsize=10)
     ax0.set_ylabel("recall_avg ↑ (1-trial precision)", color="#e0e0e0", fontsize=10)
@@ -250,7 +244,7 @@ def plot_unified_006(results: dict, out_dir: Path):
     ax1.set_title("Plan 006: Cumulative Recall (recall_cum) vs Diversity — Strong Baseline", color="#e0e0e0", fontsize=11)
     ax1.legend(facecolor="#1a1d27", edgecolor="#2d3142", labelcolor="#e0e0e0", fontsize=8)
 
-    fig.suptitle("Plan 006: Unified Tradeoff Frontier on M0_strong Baseline (MovieLens 1M)", color="white", fontsize=13, fontweight="bold")
+    fig.suptitle("Plan 006: Unified Tradeoff Frontier (Micro-λ Sweep) on M0_strong Baseline", color="white", fontsize=13, fontweight="bold")
     plt.tight_layout()
     path = out_dir / "tradeoff_006_unified.png"
     plt.savefig(path, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
@@ -288,9 +282,9 @@ def main(subexp: str, device: str):
         res_6b = run_models_eval(models_6b, test_gt, train_pos, user_embs, item_embs, device, len(item_embs))
         all_results.update(res_6b)
 
-    # ─── 6C: 3B Diversity Adapter ────────────────────────────────────────────
+    # ─── 6C: 3B Diversity Adapter Micro-Lambda Sweep ────────────────────────
     if subexp in ("6c", "all"):
-        log.info("\n" + "="*70 + "\nSub-exp 6C: 3B Diversity Adapter Sweep on M0_strong\n" + "="*70)
+        log.info("\n" + "="*70 + "\nSub-exp 6C: 3B Diversity Adapter Micro-Lambda Sweep on M0_strong\n" + "="*70)
         models_6c = [
             M3B_strong_Adapter(div_loss_name=loss, lambda_div=lam)
             for loss in SWEEP_LOSSES
