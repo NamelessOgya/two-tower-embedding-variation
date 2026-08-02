@@ -85,7 +85,8 @@ class M5_strong_Dropout(M0_EnhancedBase):
 class _DivAdapterModule(nn.Module):
     def __init__(self, dim: int = 768):
         super().__init__()
-        self.log_sigma = nn.Parameter(torch.full((dim,), -3.0))
+        # Initialized to -8.0 so initial sigma = softplus(-8.0) ≈ 0.0003, starting from Diversity = 0.00
+        self.log_sigma = nn.Parameter(torch.full((dim,), -8.0))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         sigma = F.softplus(self.log_sigma)
