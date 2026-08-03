@@ -222,8 +222,8 @@ def div_kl_dist(q1: torch.Tensor, q2: torch.Tensor,
     s2 = (items @ q2.T) / T
     log_p1 = F.log_softmax(s1, dim=0)
     p2     = F.softmax(s2, dim=0)
-    kl = -(log_p1 * p2).sum(0).mean()   # -KL → minimize to maximize KL
-    return -kl
+    kl = -(log_p1 * p2).sum(0).mean()   # -KL(p1||p2)
+    return kl   # minimize → KL↑（多様性↑）  ※ bugfix: was `return -kl` (double negation)
 
 
 def div_js_dist(q1: torch.Tensor, q2: torch.Tensor,
