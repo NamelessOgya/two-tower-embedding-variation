@@ -130,59 +130,60 @@ class TwoTowerDPP(TwoTowerModel):
         k: int,
     ) -> list[int]:
         """
-        Greedy MAP inference for Quality-Diversity DPP.
+        Vectorized greedy MAP inference for Quality-Diversity DPP.
 
         L_ij = q_i * S_ij * q_j
-            q_i = normalized quality score of item i
-            S_ij = cosine similarity between item i and j (shifted to [0,1])
+            q_i = normalized quality score
+            S_ij = cosine similarity (shifted to [0,1])
 
-        Marginal gain of adding item i given already selected S:
-            gain_i = L_ii - L_{i,S} @ inv(L_{S,S}) @ L_{S,i}
+        Marginal gain (Schur complement) — fully vectorized over candidates:
+            gains = diag(L) - einsum('ij,jk,ik->i', L[:,S], inv(L[S,S]), L[:,S])
 
-        Complexity: O(K^2 * N) — negligible for K=10, N=200.
+        Complexity: O(K * (K^2 + N*K)) — negligible for K=10, N=200.
         """
         N = len(quality_scores)
 
         # Quality を [0,1] に正規化
-        q_min = quality_scores.min()
-        q_max = quality_scores.max()
+        q_min, q_max = quality_scores.min(), quality_scores.max()
         q = (quality_scores - q_min) / (q_max - q_min + 1e-9)
 
         # Cosine similarity kernel (item_embs は L2 正規化済み)
         S = (item_embs @ item_embs.T).astype(np.float64)
-        S = (S + 1.0) / 2.0  # [-1,1] → [0,1]
+        S = (S + 1.0) / 2.0   # [-1,1] → [0,1]
 
-        # DPP カーネル行列 L_ij = q_i * S_ij * q_j
+        # DPP カーネル行列
         L = np.outer(q, q) * S
-        L += 1e-8 * np.eye(N)  # 数値安定性
+        L += 1e-8 * np.eye(N)
 
-        selected  = []
-        remaining = list(range(N))
+        diag_L = np.diag(L).copy()
+        selected: list[int] = []
+        mask = np.ones(N, dtype=bool)  # True = available
 
         for _ in range(k):
-            if not remaining:
+            if not mask.any():
                 break
 
             if len(selected) == 0:
-                # 初回: 対角最大（= 最高 quality）
-                gains = np.array([L[i, i] for i in remaining])
+                gains = diag_L.copy()
             else:
-                # Schur complement で限界ゲインを計算
-                L_SS = L[np.ix_(selected, selected)]
+                S_idx = np.array(selected, dtype=int)
+                L_SS = L[np.ix_(S_idx, S_idx)]
                 try:
                     L_SS_inv = np.linalg.inv(L_SS)
                 except np.linalg.LinAlgError:
                     L_SS_inv = np.linalg.pinv(L_SS)
-                gains = np.array([
-                    max(L[i, i] - L[i, selected] @ L_SS_inv @ L[selected, i], 1e-12)
-                    for i in remaining
-                ])
+                L_iS = L[:, S_idx]          # (N, |S|)
+                # ベクトル化: gains_i = L_ii - L_iS @ L_SS_inv @ L_iS^T (各 i に対して同時計算)
+                gains = diag_L - np.einsum("ij,jk,ik->i", L_iS, L_SS_inv, L_iS)
+                gains = np.maximum(gains, 1e-12)
 
-            best = remaining[int(np.argmax(gains))]
+            gains[~mask] = -np.inf
+            best = int(np.argmax(gains))
             selected.append(best)
-            remaining.remove(best)
+            mask[best] = False
 
         return selected
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

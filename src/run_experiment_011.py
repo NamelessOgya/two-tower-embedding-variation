@@ -50,12 +50,13 @@ PLAN_009_RESULTS = Path("report/plan_009/results.json")
 PLAN_010_RESULTS = Path("report/plan_010/results.json")
 
 # 11A: DPP 条件
+# NOTE: sigma=0 は MAP が deterministic → 毎試行同一推薦 → temporal_overlap=1.0 となり無意味
+# sigma > 0 でクエリに揺らぎを与えることで試行間の多様性が生まれる
 DPP_CONFIGS = [
     # (base_type, sigma, candidate_size)
-    ("base",     0.0,  200),   # base TT + DPP, no noise
-    ("base",     0.05, 200),   # base TT + DPP + noise
-    ("sj",       0.0,  200),   # soft_jaccard TT + DPP, no noise
-    ("sj",       0.05, 200),   # soft_jaccard TT + DPP + noise
+    ("base",     0.05, 200),   # base TT + DPP + noise σ=0.05
+    ("base",     0.10, 200),   # base TT + DPP + noise σ=0.10
+    ("sj",       0.05, 200),   # soft_jaccard TT + DPP + noise σ=0.05
 ]
 
 # 11B: MultiHead 条件
