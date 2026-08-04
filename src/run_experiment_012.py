@@ -1,7 +1,8 @@
 """
 Plan 012 Experiment Runner
 ---------------------------
-Advanced Soft-Jaccard Variants (12A: TopK, 12B: Adaptive, 12C: Semantic) を評価し、
+Advanced Soft-Jaccard Variants (12A: TopK, 12B: Adaptive, 12C: Semantic)
+および 12E: Item Partition ベースラインを評価し、
 Plan 009〜011 の最良モデル群と比較統合する。
 
 Usage:
@@ -32,6 +33,7 @@ from src.model.models_012 import (
     TwoTowerTopKSoftJaccard,
     TwoTowerAdaptiveSoftJaccard,
     TwoTowerSemanticSoftJaccard,
+    TwoTowerItemPartition,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -47,24 +49,18 @@ PLAN_009_RESULTS = Path("report/plan_009/results.json")
 PLAN_010_RESULTS = Path("report/plan_010/results.json")
 PLAN_011_RESULTS = Path("report/plan_011/results.json")
 
-# 12A: Top-K 集中型 Soft Jaccard
 TOPK_CONFIGS = [
-    # (topk, lambda_div, sigma)
     (30, 0.1, 0.05),
     (30, 0.3, 0.05),
     (10, 0.1, 0.05),
 ]
 
-# 12B: Adaptive Per-Dimension Noise Soft Jaccard
 ADAPTIVE_CONFIGS = [
-    # (lambda_div, init_sigma)
     (0.1, 0.05),
     (0.3, 0.05),
 ]
 
-# 12C: Semantic-aware Soft Jaccard
 SEMANTIC_CONFIGS = [
-    # (lambda_div, sigma)
     (0.1, 0.05),
     (0.3, 0.05),
 ]
@@ -186,6 +182,17 @@ def run_12c(base_tt, train_pos, test_gt, user_embs, item_embs, device, n_total_i
     return results
 
 
+def run_12e(base_tt, train_pos, test_gt, user_embs, item_embs, device, n_total_items):
+    log.info("\n" + "="*60 + "\nSub-exp 12E: Item Partition Baseline (全アイテム重複ゼロ分割)\n" + "="*60)
+    results = {}
+    model = TwoTowerItemPartition(base_tt=base_tt, n_trials=N_TRIALS)
+    log.info(f"\n{'='*60}\nModel: {model.name}\n{'='*60}")
+    results[model.name] = run_model_eval(
+        model, test_gt, train_pos, user_embs, item_embs, device, n_total_items
+    )
+    return results
+
+
 def plot_12d(all_results: dict, out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -197,6 +204,8 @@ def plot_12d(all_results: dict, out_dir: Path):
         ("TT_divloss_soft_jaccard_l0p1_s0p05",    "#f1c40f", "*", 12, "SoftJaccard λ=0.1",      None),
         ("TwoTower_d2_h64_dpp_s0p1",              "#3498db", "D",  9, "DPP (base TT)",          None),
         ("TT_multihead_M3_l0p1_s0p05",            "#9b59b6", "^",  9, "MultiHead M=3",          None),
+        # ── 12E: 新追加ベースライン
+        ("TT_item_partition",                     "#e74c3c", "h", 12, "Item Partition (Overlap=0)", None),
         # ── Plan 012 新手法
         ("TT_topk30_sj",                          "#2ecc71", "s", 11, "TopK-SoftJaccard (k=30)",None),
         ("TT_topk10_sj",                          "#27ae60", "s", 10, "TopK-SoftJaccard (k=10)",None),
@@ -291,7 +300,7 @@ def print_summary(all_results: dict):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--subexp", default="all",
-                        choices=["all", "12A", "12B", "12C", "12D"])
+                        choices=["all", "12A", "12B", "12C", "12E", "12D"])
     parser.add_argument("--device", default="cuda")
     args = parser.parse_args()
     run_all = args.subexp == "all"
@@ -325,12 +334,17 @@ def main():
             lr=1e-3, epochs=50, batch_size=1024,
             logit_scale=14.3, alpha=0.1,
         )
-        log.info(f"Re-training base TwoTower_d{BEST_DEPTH}_h{BEST_HIDDEN_DIM} ...")
+        log.info(f"Re-training base TwoTower_d2_h64 ...")
         tt.prepare(train_pos, user_embs, item_embs, device=args.device)
         return tt
 
-    if run_all or args.subexp in ("12A", "12B", "12C"):
+    if run_all or args.subexp in ("12A", "12B", "12C", "12E"):
         best_tt = rebuild_base_tt()
+
+        if run_all or args.subexp == "12E":
+            r = run_12e(best_tt, train_pos, test_gt, user_embs, item_embs, args.device, n_total_items)
+            all_results.update(r)
+            save_results(all_results, OUT_DIR)
 
         if run_all or args.subexp == "12A":
             r = run_12a(best_tt, train_pos, test_gt, user_embs, item_embs, args.device, n_total_items)

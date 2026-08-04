@@ -1,20 +1,21 @@
 """
-Plan 012 Models: Advanced Soft-Jaccard Variants
-------------------------------------------------
-Plan 008〜011 で最も優れた探索性能を示した soft_jaccard DivLoss の拡張・改良モデル群。
+Plan 012 Models: Advanced Soft-Jaccard Variants & Item Partition Baseline
+--------------------------------------------------------------------------
+Plan 008〜011 で最も優れた探索性能を示した soft_jaccard DivLoss の拡張・改良モデル群、
+および全アイテムを試行ごとに分割する Item Partition ベースライン。
 
 12A: TwoTowerTopKSoftJaccard
     - 上位 K_loss (例: 30件) の確率分布のみを用いて Soft Jaccard 損失を計算。
-    - 低順位アイテムの分布破壊を抑え、単試行精度 (recall_avg) の低下を防ぐ。
 
 12B: TwoTowerAdaptiveSoftJaccard
-    - 次元別のノイズスケール log_sigma (768 or hidden_dim 次元の Parameter) を定義。
-    - 推論時に q = L2Norm(user_head(x) + softplus(log_sigma) * eps) とし、
-      BPR 損失 + Soft Jaccard 損失で end-to-end 学習。
+    - 次元別のノイズスケール log_sigma を定義し、BPR + Soft Jaccard で end-to-end 学習。
 
 12C: TwoTowerSemanticSoftJaccard
-    - アイテム埋め込み類似度行列 S_ij = item_emb_i · item_emb_j を考慮した Soft Jaccard 損失。
-    - 単なる ID 一致ではなくジャンルや属性の意味的被りを最小化。
+    - アイテム埋め込み類似度行列 S_ij を考慮した Soft Jaccard 損失。
+
+12E (Baseline): TwoTowerItemPartition
+    - 全アイテムを N_trials 個の重複のないバケットにランダム分割。
+    - 試行 t では第 t バケット内のアイテムのみから Top-K を推薦（Overlap = 0.0, Diversity = 1.0）。
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ import copy
 import logging
 from typing import Optional, Callable
 
+import faiss
 import numpy as np
 import torch
 import torch.nn as nn
@@ -34,6 +36,81 @@ from src.model.models_003 import DIV_LOSSES, NEEDS_ITEMS
 log = logging.getLogger(__name__)
 
 
+# ── 12E: Item Partition Baseline (全アイテムを試行ごとに分割) ─────────────────
+
+class TwoTowerItemPartition(TwoTowerModel):
+    """
+    全アイテム集合を N_trials 個の重複しないバケットに分割し、
+    試行 t では第 t バケットに含まれるアイテム群のみから Top-K を推薦するモデル。
+    試行間のアイテム重複が完全にゼロ (Overlap = 0.0, Diversity = 1.0) になる決定論的・強制分割ベースライン。
+    """
+
+    def __init__(
+        self,
+        base_tt: TwoTowerModel,
+        n_trials: int = 10,
+    ):
+        super().__init__(
+            hidden_dim=base_tt.hidden_dim,
+            depth=base_tt.depth,
+            logit_scale=base_tt.logit_scale,
+            alpha=base_tt.alpha,
+            name=f"TT_item_partition_n{n_trials}",
+        )
+        self._base_tt = base_tt
+        self.n_trials = n_trials
+        self.buckets: list[np.ndarray] = []  # 各試行に割り当てるアイテム index 配列
+
+    def prepare(self, train_pos, user_embeddings, item_embeddings, device="cuda"):
+        self._device            = self._base_tt._device
+        self.whitener           = self._base_tt.whitener
+        self.logq               = self._base_tt.logq
+        self.whitened_user_embs = self._base_tt.whitened_user_embs
+        self.whitened_item_embs = self._base_tt.whitened_item_embs
+        self.user_head          = self._base_tt.user_head
+        self.item_head          = self._base_tt.item_head
+        self._proj_item_embs   = self._base_tt._proj_item_embs
+
+        n_items = len(self.whitened_item_embs)
+        # 固定シードでアイテムをシャッフルし n_trials 個のバケットに分割
+        perm_rng = np.random.default_rng(42)
+        shuffled_items = perm_rng.permutation(n_items)
+        self.buckets = np.array_split(shuffled_items, self.n_trials)
+        log.info(f"[{self.name}] Partitioned {n_items} items into {self.n_trials} buckets (sizes: {[len(b) for b in self.buckets]})")
+
+    def recommend(
+        self,
+        user_idx: int,
+        trial: int,
+        rng: np.random.Generator,
+        index: faiss.IndexFlatIP,
+        k: int,
+        candidate_pool_size: int = 200,
+    ) -> list[int]:
+        bucket_idx = trial % self.n_trials
+        cand_items = self.buckets[bucket_idx]
+
+        # クエリベクトル取得
+        dev = self._device
+        u_t = torch.from_numpy(self.whitened_user_embs[user_idx: user_idx + 1]).float().to(dev)
+        with torch.no_grad():
+            q = self.user_head(u_t).cpu().numpy()[0]
+
+        # 該当バケット内のアイテムの投影ベクトルとの内積スコアを計算
+        cand_embs = self._proj_item_embs[cand_items]  # (N_bucket, hidden_dim)
+        cand_scores = (cand_embs @ q).astype(np.float64)
+
+        # LogQ 補正
+        if self.logq is not None:
+            penalties = self.logq.get_penalties(cand_items)
+            cand_scores = self.logit_scale * cand_scores - self.alpha * penalties
+
+        # スコア Top-K を選択
+        topk_local = np.argpartition(cand_scores, -min(k, len(cand_scores)))[-min(k, len(cand_scores)):]
+        topk_sorted = topk_local[np.argsort(-cand_scores[topk_local])]
+        return list(cand_items[topk_sorted])
+
+
 # ── 12A: Top-K Truncated Soft Jaccard ─────────────────────────────────────────
 
 def div_topk_soft_jaccard(
@@ -43,17 +120,11 @@ def div_topk_soft_jaccard(
     T: float = 0.1,
     topk: int = 30,
 ) -> torch.Tensor:
-    """
-    [Top-K 集中型 Soft Jaccard]
-    上位 K_loss 件のアイテムのスコアのみを残し、それ以外のスコアを -inf でマスクして Softmax 計算。
-    上位の推薦リスト内での重なりだけを厳密にペナルティ化する。
-    """
-    s1 = (items @ q1.T) / T  # (N_items, B)
-    s2 = (items @ q2.T) / T  # (N_items, B)
+    s1 = (items @ q1.T) / T
+    s2 = (items @ q2.T) / T
 
-    # 上位 topk 以外のスコアを -inf でマスク
     topk_vals1, _ = torch.topk(s1, topk, dim=0)
-    thresh1 = topk_vals1[-1:, :]  # (1, B)
+    thresh1 = topk_vals1[-1:, :]
     mask1 = s1 < thresh1
     s1_masked = s1.masked_fill(mask1, -1e9)
 
@@ -134,7 +205,6 @@ class TwoTowerTopKSoftJaccard(TwoTowerModel):
         self.user_head.train()
         self.item_head.eval()
 
-        # div loss 用アイテムサンプル (500)
         n_div_items = 500
         div_item_idx = torch.randperm(N_items)[:n_div_items]
         X_div = X_item[div_item_idx]
@@ -239,9 +309,8 @@ class TwoTowerAdaptiveSoftJaccard(TwoTowerModel):
         self.user_head = copy.deepcopy(self._base_tt.user_head)
         self.item_head = copy.deepcopy(self._base_tt.item_head)
 
-        # 次元別 (768次元) の log_sigma を可変パラメータとして定義
         dim = self.whitened_user_embs.shape[1]
-        init_val = float(np.log(np.exp(self.init_sigma) - 1.0 + 1e-6))  # Softplus の逆関数
+        init_val = float(np.log(np.exp(self.init_sigma) - 1.0 + 1e-6))
         self.log_sigma_param = nn.Parameter(torch.full((dim,), init_val, device=self._device))
 
         log.info(f"[{self.name}] Training Adaptive SoftJaccard: lambda={self.lambda_div}, init_sigma={self.init_sigma}")
@@ -276,8 +345,6 @@ class TwoTowerAdaptiveSoftJaccard(TwoTowerModel):
             perm = torch.randperm(len(pairs_t))
             epoch_loss = 0.0
             n_batches = 0
-
-            # softplus で正値な sigma を取得
             sigmas = F.softplus(self.log_sigma_param)
 
             for i in range(0, len(pairs_t), self.batch_size):
@@ -304,7 +371,6 @@ class TwoTowerAdaptiveSoftJaccard(TwoTowerModel):
 
                 bpr_loss = 0.5 * (-F.logsigmoid(s_pos1 - s_neg1).mean() + -F.logsigmoid(s_pos2 - s_neg2).mean())
 
-                # Soft Jaccard
                 s1 = (proj_div @ q1.T) / 0.1
                 s2 = (proj_div @ q2.T) / 0.1
                 p1 = F.softmax(s1, dim=0)
@@ -349,26 +415,19 @@ def div_semantic_soft_jaccard(
     items: torch.Tensor,
     T: float = 0.1,
 ) -> torch.Tensor:
-    """
-    [意味的類似度考慮型 Soft Jaccard]
-    アイテム間の埋め込み類似度 S_ij = item_i · item_j (>= 0) を考慮。
-    S を挟んだ Soft Jaccard: (p1^T S p2) / (p1^T S p1 + p2^T S p2 - p1^T S p2)
-    """
-    s1 = (items @ q1.T) / T  # (N_items, B)
+    s1 = (items @ q1.T) / T
     s2 = (items @ q2.T) / T
-    p1 = F.softmax(s1, dim=0)  # (N_items, B)
+    p1 = F.softmax(s1, dim=0)
     p2 = F.softmax(s2, dim=0)
 
-    # アイテム類似度行列 S (N_items, N_items), [-1,1] → [0,1]
     S = (items @ items.T).clamp(min=0.0)
 
-    # (B, N_items) @ (N_items, N_items) @ (N_items, B) -> (B, B) の対角成分
-    Sp1 = S @ p1  # (N_items, B)
-    Sp2 = S @ p2  # (N_items, B)
+    Sp1 = S @ p1
+    Sp2 = S @ p2
 
-    p1_S_p2 = (p1 * Sp2).sum(0)  # (B,)
-    p1_S_p1 = (p1 * Sp1).sum(0)  # (B,)
-    p2_S_p2 = (p2 * Sp2).sum(0)  # (B,)
+    p1_S_p2 = (p1 * Sp2).sum(0)
+    p1_S_p1 = (p1 * Sp1).sum(0)
+    p2_S_p2 = (p2 * Sp2).sum(0)
 
     inter = p1_S_p2
     union = p1_S_p1 + p2_S_p2 - p1_S_p2
