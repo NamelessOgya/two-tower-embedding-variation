@@ -345,14 +345,13 @@ class TwoTowerAdaptiveSoftJaccard(TwoTowerModel):
             perm = torch.randperm(len(pairs_t))
             epoch_loss = 0.0
             n_batches = 0
-            sigmas = F.softplus(self.log_sigma_param)
-
             for i in range(0, len(pairs_t), self.batch_size):
                 bp = pairs_t[perm[i: i + self.batch_size]].to(dev)
                 u_idx = bp[:, 0]
                 p_idx = bp[:, 1]
                 n_idx = torch.randint(0, N_items, (len(bp),), device=dev)
 
+                sigmas = F.softplus(self.log_sigma_param)
                 u_emb = X_user[u_idx]
                 eps1 = torch.randn_like(u_emb) * sigmas
                 eps2 = torch.randn_like(u_emb) * sigmas
