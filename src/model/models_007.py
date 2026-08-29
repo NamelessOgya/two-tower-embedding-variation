@@ -106,6 +106,7 @@ class TwoTowerModel(BaseModel):
         self.item_head: Optional[MLPHead] = None
         self._device: Optional[torch.device] = None
         self._proj_item_embs: Optional[np.ndarray] = None  # cached item projections
+        self._proj_user_embs: Optional[np.ndarray] = None  # cached user projections
 
     def prepare(self, train_pos, user_embeddings, item_embeddings, device="cuda"):
         super().prepare(train_pos, user_embeddings, item_embeddings, device)
@@ -127,9 +128,10 @@ class TwoTowerModel(BaseModel):
         self.item_head = MLPHead(768, self.hidden_dim, self.depth).to(self._device)
         self._train(train_pos)
 
-        # Step 4: Pre-compute projected item embeddings for FAISS
-        log.info(f"[{self.name}] Pre-computing item projections ...")
+        # Step 4: Pre-compute projected item and user embeddings
+        log.info(f"[{self.name}] Pre-computing item & user projections ...")
         self._proj_item_embs = self._project_items()
+        self._proj_user_embs = self._project_users()
 
     def _train(self, train_pos: dict):
         dev = self._device
@@ -199,11 +201,24 @@ class TwoTowerModel(BaseModel):
         dev = self._device
         X_item = torch.from_numpy(self.whitened_item_embs).float().to(dev)
         self.item_head.eval()
-        batch_size = 512
+        batch_size = 1024
         results = []
         with torch.no_grad():
             for i in range(0, len(X_item), batch_size):
                 proj = self.item_head(X_item[i: i + batch_size])
+                results.append(proj.cpu().float().numpy())
+        return np.vstack(results)
+
+    def _project_users(self) -> np.ndarray:
+        """全ユーザーを user_head で一括変換し numpy に返す。"""
+        dev = self._device
+        X_user = torch.from_numpy(self.whitened_user_embs).float().to(dev)
+        self.user_head.eval()
+        batch_size = 1024
+        results = []
+        with torch.no_grad():
+            for i in range(0, len(X_user), batch_size):
+                proj = self.user_head(X_user[i: i + batch_size])
                 results.append(proj.cpu().float().numpy())
         return np.vstack(results)
 
@@ -215,8 +230,9 @@ class TwoTowerModel(BaseModel):
         return index
 
     def get_query_vector(self, user_idx: int, trial: int, rng: np.random.Generator) -> np.ndarray:
-        """ユーザーの whitened 埋め込みを user_head で変換して返す。"""
-        assert self.user_head is not None
+        """キャッシュされたユーザー投影ベクトルを返す。"""
+        if self._proj_user_embs is not None:
+            return self._proj_user_embs[user_idx]
         dev = self._device
         u_t = torch.from_numpy(
             self.whitened_user_embs[user_idx: user_idx + 1]
