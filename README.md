@@ -141,10 +141,8 @@ $$\text{Diversity} = 1.0 - \text{Temporal Overlap Rate}$$
 ### 6. 提案手法: 2 段階 Plackett–Luce 確率的サンプリング (`TT_2stage_PL_M200_tau`) (Plan 016/017)
 - **仕組み**:
   1. **Stage 1 (FAISS 近傍抽出 $M=200$)**: ユーザーベクトル $\boldsymbol{q}_u$ により上位 $M=200$ 件の適合候補プール $\mathcal{C}_u$ を超高速抽出し、カタログの下位 95% 以上の非関連ノイズ品を完全に遮断。
-  2. **Stage 2 (温度 $\tau$ の下での Gumbel-Top-$K$ サンプリング)**: 候補プール $\mathcal{C}_u$ 内の適合スコアに対して Plackett-Luce 確率的非復元抽出を実行：
-
-     $$\hat{s}_{u, i} = \frac{\langle \boldsymbol{q}_u, \boldsymbol{x}_i \rangle}{\tau} + g_{i}, \quad g_i \sim \mathrm{Gumbel}(0, 1)$$
-
+  2. **Stage 2 (温度 $\tau$ の下での Gumbel-Top-$K$ サンプリング)**: 候補プール $\mathcal{C}_u$ 内の適合スコアに対して Plackett-Luce 確率的非復元抽出を実行：  
+     $\hat{s}_{u, i} = \frac{\langle \boldsymbol{q}_u, \boldsymbol{x}_i \rangle}{\tau} + g_{i}, \quad g_i \sim \mathrm{Gumbel}(0, 1)$
 - **特徴・優位性**: 試行ごとに独立した Gumbel ノイズ $g_i$ を引くことで、上位適合品の中で自然な確率的探求（Exploration）が行われ、**過去履歴非依存のまま全スロット精度 (`Total Slate Precision`) と 1 回あたりの平均精度 (`recall_avg`) の両方で過去最高値を達成**する。
 
 ---
