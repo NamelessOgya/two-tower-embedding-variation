@@ -124,8 +124,9 @@ class TwoTowerModel(BaseModel):
         self.logq = LogQCorrector(train_pos, n_items, alpha=self.alpha)
 
         # Step 3: Build and train MLP towers
-        self.user_head = MLPHead(768, self.hidden_dim, self.depth).to(self._device)
-        self.item_head = MLPHead(768, self.hidden_dim, self.depth).to(self._device)
+        in_dim = item_embeddings.shape[1]
+        self.user_head = MLPHead(in_dim, self.hidden_dim, self.depth).to(self._device)
+        self.item_head = MLPHead(in_dim, self.hidden_dim, self.depth).to(self._device)
         self._train(train_pos)
 
         # Step 4: Pre-compute projected item and user embeddings
