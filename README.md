@@ -67,7 +67,7 @@ $$s(u, i) = \frac{1}{\tau} \langle \boldsymbol{q}_u, \boldsymbol{x}_i \rangle - 
 
 ### 1. 全スロット精度 (Total Slate Precision / Total Precision) [%]
 全 10 試行で提示された合計 100 個の推薦スロットのうち、ユーザーの適合品（Ground-Truth）が何割を占めたかを表す指標。
-$$\text{Total Slate Precision (\%)} = \frac{1}{|U|} \sum_{u \in U} \left( \frac{\sum_{t=1}^{N_{\text{trials}}} \left| S_{u, t} \cap \mathcal{Y}_u \right|}{N_{\text{trials}} \times K} \right) \times 100\%$$
+$$\text{Total Slate Precision} = \frac{1}{|U|} \sum_{u \in U} \left( \frac{\sum_{t=1}^{N_{\text{trials}}} \left| S_{u, t} \cap \mathcal{Y}_u \right|}{N_{\text{trials}} \times K} \right) \times 100\%$$
 *(※ $S_{u, t}$ はユーザー $u$ の試行 $t$ における Top-$K$ 推薦集合)*
 
 ### 2. Total Recall (10 試行累積 Recall `recall_cum`)
@@ -142,7 +142,9 @@ $$\text{Diversity} = 1.0 - \text{Temporal Overlap Rate}$$
 - **仕組み**:
   1. **Stage 1 (FAISS 近傍抽出 $M=200$)**: ユーザーベクトル $\boldsymbol{q}_u$ により上位 $M=200$ 件の適合候補プール $\mathcal{C}_u$ を超高速抽出し、カタログの下位 95% 以上の非関連ノイズ品を完全に遮断。
   2. **Stage 2 (温度 $\tau$ の下での Gumbel-Top-$K$ サンプリング)**: 候補プール $\mathcal{C}_u$ 内の適合スコアに対して Plackett-Luce 確率的非復元抽出を実行：
-     $$\hat{s}_{u, i} = \frac{\langle \boldsymbol{q}_u, \boldsymbol{x}_i \rangle}{\tau} + g_{i}, \quad g_i \sim \text{Gumbel}(0, 1)$$
+
+     $$\hat{s}_{u, i} = \frac{\langle \boldsymbol{q}_u, \boldsymbol{x}_i \rangle}{\tau} + g_{i}, \quad g_i \sim \mathrm{Gumbel}(0, 1)$$
+
 - **特徴・優位性**: 試行ごとに独立した Gumbel ノイズ $g_i$ を引くことで、上位適合品の中で自然な確率的探求（Exploration）が行われ、**過去履歴非依存のまま全スロット精度 (`Total Slate Precision`) と 1 回あたりの平均精度 (`recall_avg`) の両方で過去最高値を達成**する。
 
 ---
