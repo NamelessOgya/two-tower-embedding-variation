@@ -72,11 +72,11 @@ $$\text{Total Slate Precision (\%)} = \frac{1}{|U|} \sum_{u \in U} \left( \frac{
 
 ### 2. Total Recall (10 試行累積 Recall `recall_cum`)
 全 10 試行の推薦リストを重ね合わせた集合（和集合）が、ユーザーの適合品全体をどの割合カバーできたかを表す全体網羅性指標。
-$$\text{Total Recall (recall\_cum)} = \frac{1}{|U|} \sum_{u \in U} \frac{\left| \left( \bigcup_{t=1}^{N_{\text{trials}}} S_{u, t} \right) \cap \mathcal{Y}_u \right|}{|\mathcal{Y}_u|}$$
+$$\text{Total Recall} = \frac{1}{|U|} \sum_{u \in U} \frac{\left| \left( \bigcup_{t=1}^{N_{\text{trials}}} S_{u, t} \right) \cap \mathcal{Y}_u \right|}{|\mathcal{Y}_u|}$$
 
 ### 3. 1 試行平均 Recall (`recall_avg`)
 単一の試行（1 回の画面表示）における推薦リスト Top-$K$ の平均 Recall。
-$$\text{Average Recall (recall\_avg)} = \frac{1}{|U|} \sum_{u \in U} \left( \frac{1}{N_{\text{trials}}} \sum_{t=1}^{N_{\text{trials}}} \frac{|S_{u, t} \cap \mathcal{Y}_u|}{|\mathcal{Y}_u|} \right)$$
+$$\text{Average Recall} = \frac{1}{|U|} \sum_{u \in U} \left( \frac{1}{N_{\text{trials}}} \sum_{t=1}^{N_{\text{trials}}} \frac{|S_{u, t} \cap \mathcal{Y}_u|}{|\mathcal{Y}_u|} \right)$$
 
 ### 4. 多様性指標 (Diversity = $1 - \text{Overlap}$)
 試行間における推薦アイテムの非重複率（多様性）。試行間重複率 $\text{Overlap}$ の余集合として定義される。
